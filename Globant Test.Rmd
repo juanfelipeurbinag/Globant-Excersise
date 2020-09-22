@@ -38,7 +38,7 @@ anyNA(diabetes)
 ```
 ## Convert some integer variables to factor
 
-We have three variables (admission_type_id, discharge_disposition_id, admission_source_id) which are ids that need to be considered as factors instead of integer for the analysis.
+We have three variables (admission_type_id, discharge_disposition_id, admission_source_id) which are ids that need to be considered as factors instead of an integer for the analysis.
 
 ```{r convert to factors, echo=FALSE}
 diabetes$admission_type_id <- as.factor(diabetes$admission_type_id)
@@ -155,7 +155,7 @@ rpart.plot(rtree)
 
 ```
 
-We can observe that the classification tree at this level only classifies between NO readmittance and >30 readmittance. To get the <30 level we would need to grow the tree larger.
+We can observe that the classification tree at this level only classifies between NO readmittance and >30 readmittance. To get the <30 level we would need to grow a larger tree.
 
 From the initials insights we see that a large segment of the population is allocated in the NO readmittance bucket just by observing the number of impatient hospital visits, if it is smaller than one, the patient is predicted not to be readmitted in the future. The next node evaluate the discharge disposition id, and based on that factor, if the discharge description is within the ids (11,13,14,17,19,20,21,26) the patient will be segmented as NOT readmitted in the future. Going further down, we see that if the number of inpatien visits is larger or equal to 2, these patients will have a larger probability of being readmitted into the hospital.
 
