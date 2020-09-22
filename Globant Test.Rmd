@@ -1,0 +1,180 @@
+---
+title: "Ejercicio Globant"
+author: "Juan Felipe Urbina"
+date: "9/21/2020"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Diabetes Dataset Analysis
+
+In this dataset you have 3 different outputs:
+
+1. No readmission;
+2. A readmission in less than 30 days (this situation is not good, because maybe your treatment was not appropriate);
+3. A readmission in more than 30 days (this one is not so good as well the last one, however, the reason could be the state of the patient.
+
+Your task is either to classify a patient-hospital outcome or to cluster them aiming at finding patterns that give a distinct insight.
+
+------
+
+First task will be to read the dataset and undersand what data is available on it and what is their data type and also check if there are any NAs on the dataset.
+
+```{r Read the dataset}
+setwd("~/Github/Globant-Excersise")
+library(caret)
+
+diabetes <- read.csv('diabetic_data.csv')
+print('Dataframe structure')
+str(diabetes)
+
+print('Are there any NAs?')
+anyNA(diabetes)
+```
+## Convert some integer variables to factor
+
+We have three variables (admission_type_id, discharge_disposition_id, admission_source_id) which are ids that need to be considered as factors instead of integer for the analysis.
+
+```{r convert to factors, echo=FALSE}
+diabetes$admission_type_id <- as.factor(diabetes$admission_type_id)
+diabetes$discharge_disposition_id <- as.factor(diabetes$discharge_disposition_id)
+diabetes$admission_source_id <- as.factor(diabetes$admission_source_id)
+
+```
+## Get summary of data
+
+Now we can get a summary of what is contained in each variable.
+
+```{r pressure, echo=FALSE}
+summary(diabetes)
+```
+
+We can see that we have missing values for some variables, identified with a question mark ('?'). It will be important to count the number of missing values for each variable either to remove missing records or remove the variable from the analysis due to missing values.
+
+``` {r missing_values}
+
+for (x in c(1:length(colnames(diabetes)))) {
+  print(colnames(diabetes)[x])
+  print(length(diabetes[diabetes[,x]=='?' ,x]))
+}
+
+
+``` 
+
+## Remove irrelevant variables and records with missing values
+
+The variables encounter_id, patient_nbr, payer_code,  will be removed because they are ids or codes to identify the patient or payment type and are not affecting the dependant variable ("readmitted").
+The variables weight and medical spec have a large number of '?' in its values, so they will be removed from the analysis.
+The variables examide and citoglipton have all a value of 'No' so they can be removed from the analysis because they don't add any information.
+The variables race, dig_1, diag_2, diag_3 have some missing values ('?') on the data, so we will be removing the records with missing data in these four columns.
+
+``` {r clean data}
+# remove irrelevant columns # 
+diabetes_clean <- subset(diabetes, select=-c(encounter_id,patient_nbr,payer_code,weight,medical_specialty,examide,citoglipton))
+
+# remove records with missing values #
+diabetes_clean <-diabetes_clean[!(diabetes_clean$race=="?" | diabetes_clean$diag_1=="?" | diabetes_clean$diag_2=="?" | diabetes_clean$diag_3=="?"),]
+
+```
+
+Now we have a clean dataset with the right data types to run the analysis.
+
+## Plot realtions between variables ##
+
+First i want to check if there are significant differences in the readmitted variable using box plots to plot it against numerical variables
+
+``` {r numerical variables}
+Time_in_Hosp_Plot = ggplot(diabetes_clean, aes(x = readmitted, y = time_in_hospital)) + geom_boxplot()  + 
+  ggtitle("Time in Hospital")
+Time_in_Hosp_Plot
+
+Lab_proc_Plot = ggplot(diabetes_clean, aes(x = readmitted, y = num_lab_procedures)) + geom_boxplot()  + 
+  ggtitle("Number of Lab Procedures")
+Lab_proc_Plot
+
+Proc_Plot = ggplot(diabetes_clean, aes(x = readmitted, y = num_procedures)) + geom_boxplot() + 
+  ggtitle("Number of Total Procedures") 
+Proc_Plot
+
+Medic_Plot = ggplot(diabetes_clean, aes(x = readmitted, y = num_medications)) + geom_boxplot()  + 
+  ggtitle("Number of Medications")
+Medic_Plot
+
+Diagn_Plot = ggplot(diabetes_clean, aes(x = readmitted, y = number_diagnoses)) + geom_boxplot()  + 
+  ggtitle("Number of Diagnoses")
+Diagn_Plot
+```
+
+From the plots, we see that the median has differences for time_in_hospital and number_diagnoses, and mainly in the group of patients that were not readmitted in the hospital.
+
+We can also plot the relation between a couple of the categorical variables (gender and age), and the readmittance variable.
+
+``` {r categorical variables}
+
+StackedBar = ggplot(diabetes_clean, aes(x = readmitted, ..count.., fill= gender)) +
+  geom_bar(position = "fill") + 
+  ggtitle("Gender")
+StackedBar
+
+StackedBar = ggplot(diabetes_clean, aes(x = readmitted, ..count.., fill= age)) +
+  geom_bar(position = "fill") + 
+  ggtitle("Age")
+StackedBar
+
+```
+
+There are no signs of large differences in behaviour by gender or age. Just a slight increase in share of older people for those readmitted in <30 days.
+
+## Classification Tree to identify segments ##
+
+We can use a clasification tree to understand how the patients can be split based on certain variables. Some of the variables that we will remove from this analysis are due to the number of levels within the variable (diag_1, diag_2, diag_3) or due to have small variability in the values.
+
+
+``` {r classification tree}
+library(rpart)
+library(rpart.plot)
+
+set.seed(100)
+intrain <- createDataPartition(y = diabetes_clean$readmitted, p= 0.7, list = FALSE)
+training <- diabetes[intrain,]
+testing <- diabetes[-intrain,]
+
+
+rtree <- rpart(readmitted ~ race + gender + age + admission_type_id + discharge_disposition_id 
+               + admission_source_id + time_in_hospital + num_lab_procedures + num_procedures 
+               + num_medications + number_outpatient + number_emergency + number_inpatient 
+               + number_diagnoses + max_glu_serum + A1Cresult + insulin + change + diabetesMed, 
+               data = training, method = "class", minsplit = 1, minbucket = 1, cp = 0.001)
+
+rpart.plot(rtree)
+
+```
+
+We can observe that the classification tree at this level only classifies between NO readmittance and >30 readmittance. To get the <30 level we would need to grow the tree larger.
+
+From the initials insights we see that a large segment of the population is allocated in the NO readmittance bucket just by observing the number of impatient hospital visits, if it is smaller than one, the patient is predicted not to be readmitted in the future. The next node evaluate the discharge disposition id, and based on that factor, if the discharge description is within the ids (11,13,14,17,19,20,21,26) the patient will be segmented as NOT readmitted in the future. Going further down, we see that if the number of inpatien visits is larger or equal to 2, these patients will have a larger probability of being readmitted into the hospital.
+
+The baseline accuracy for the prediction for this data set will be 54%, due to the larger number of cases that ended up in No Readmmitance.
+
+Further analysis can be done to use Random Forest with the listed variables to understand how is the performance of the readmittance prediction. Here is a first approach:
+
+``` {r random forest}
+library(randomForest)
+
+rf_classifier = randomForest(readmitted ~ race + gender + age + admission_type_id + discharge_disposition_id 
+                             + admission_source_id + time_in_hospital + num_lab_procedures + num_procedures 
+                             + num_medications + number_outpatient + number_emergency + number_inpatient 
+                             + number_diagnoses + max_glu_serum + A1Cresult + insulin + change + diabetesMed, 
+                             data = training, ntree=100, mtry=10, importance=TRUE)
+rf_classifier
+varImpPlot(rf_classifier)
+```
+
+From the random forest model summary we observe that the accuracy is close to 56%, which is low i compared with the baseline prediction (54%), so there is not much improvement yet.
+
+We can further explore the variables importance, which shows that both number impatient and discharge disposition id are important to the model, because they have a larger decrease y accuracy if removed from the model. Also, by checking the mean decrease Gini coefficient we can understand which variables result in nodes with higher purity. 
